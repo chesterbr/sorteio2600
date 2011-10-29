@@ -14,10 +14,13 @@
     INCLUDE "vcs.h"
 
 ; Constantes
-SCANLINES_POR_LINHA = 4
-MODO_SELECT         = %001
-MODO_RODANDO        = %010
-MODO_PARANDO        = %100
+SCANLINES_POR_LINHA      = 4
+MODO_SELECT              = %001
+MODO_RODANDO             = %010
+MODO_PARANDO             = %100
+CHAVE_GAME_SELECT        = %10
+CHAVE_GAME_RESET         = %01
+CHAVES_GAME_SELECT_RESET = %11
 
 ; RAM (variáveis)
 digito0             = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
@@ -31,6 +34,8 @@ modoAtual           = $87         ; Indica se estamos em MODO_SELECT (escolhendo
                                   ;   máximo do sorteio), MODO_RODANDO (animando em velocidade
                                   ;   total) ou MODO_PARANDO (reduzindo até sortear)
 limiteDigito0       = $88         ; Valor máximo para a centena do número sorteado
+valorSelectReset    = $89         ; Guarda status das chaves select/reset no frame anterior
+                                  ;   (armazenando os bits correspondentes a eles do SWCHB)
 
 
 ; ROM    
@@ -45,6 +50,9 @@ InicializaRAM:
     lda #0                        ;   - dezena e unidade no 0.
     sta digito1
     sta digito2
+    sta valorSelectReset          ; Console ligado sem nenhuma chave
+
+;;;;; VSYNC ;;;;
 
 InicioFrame:
     lda #%00000010                ; VSYNC inicia setando o bit 1 deste endereço
@@ -53,9 +61,43 @@ InicioFrame:
         sta WSYNC
     REPEND
     lda #0
-    sta VSYNC                     ; VSYNC finaliza limpando o bit 1       
+    sta VSYNC                     ; VSYNC finaliza limpando o bit 1
 
-AjustaCores:                      ; Primeira linha do VBLANK
+;;;;; VBLANK ;;;;;    
+
+DefineModoAtual:                  ; Primeira linha do VBLANK
+    lda SWCHB                     ; Carrega status das chaves GAME SELECT/GAME RESET no A,
+    and #CHAVES_GAME_SELECT_RESET ;   zerando bits que não sejam estes
+    eor #CHAVES_GAME_SELECT_RESET ; Inverte status (para ficar 1=pressionado, 0=solto)
+    tax                           ; Copia pro X para guardar o valor no final
+    cmp valorSelectReset
+    beq FimDefineModoAtual        ; Nenhuma chave pressionada/solta, vai pra próxima
+DefineChavePressionada:
+    cmp #CHAVE_GAME_RESET
+    beq ResetPressionado
+    cmp #CHAVE_GAME_SELECT
+    bne FimDefineModoAtual
+SelectPressionado:
+    lda #MODO_SELECT              ; GAME SELECT pressionada - se já estivermos em modo select,
+    cmp modoAtual                 ;   incrementa o limite, senão só muda para este modo
+    bne DefineModoSelect
+    inc limiteDigito0             ; incrementa o limite (TODO: checar overflow)
+DefineModoSelect:
+    sta modoAtual
+    lda limiteDigito0
+    sta digito0
+    lda #0
+    sta digito1
+    sta digito2
+    jmp FimDefineModoAtual ; TODO mudar pra beq (ganha 1 byte)
+ResetPressionado:
+    lda #MODO_RODANDO             ; Começa a rodar (TODO incluir semente de randomizacao)
+    sta modoAtual
+FimDefineModoAtual:
+    stx valorSelectReset          ; Guarda o status das chaves pro próximo frame
+    sta WSYNC
+
+AjustaCores:                      ; Segunda linha do VBLANK
     lda #$00        
     sta ENABL                     ; Desliga a ball, os missiles e os players
     sta ENAM0
@@ -71,7 +113,7 @@ AjustaCores:                      ; Primeira linha do VBLANK
     ldx #0                        ; X é o nosso contador de scanlines (0-191)
     sta WSYNC
     
-AjustaDigitos:                    ; Segunda linha do VBLANK
+AjustaDigitos:                    ; Terceira linha do VBLANK
     lda digito0                   ; Posicao na tabela é 8 vezes o valor do dígito
     asl                           ; 3 shifts = 8 vezes
     asl
@@ -92,11 +134,13 @@ AjustaDigitos:                    ; Segunda linha do VBLANK
     sta WSYNC
 
 FinalizaVBLANK:
-    REPEAT 35                     ; VBLANK tem 37 linhas, mas usamos 2 acima
+    REPEAT 34                     ; VBLANK tem 37 linhas, mas usamos 3 acima
         sta WSYNC     
     REPEND
     lda #0                        ; Finaliza o VBLANK, "ligando o canhão"
     sta VBLANK  
+
+;;;;; DISPLAY KERNEL ;;;;;
     
 Scanline:
     cpx #[SCANLINES_POR_LINHA*8]  ; Se estamos na parte superior desenha os digitos, caso
@@ -124,8 +168,8 @@ DesenhaDigitos:
     jmp FimScanline
     
 DecideValorDigitos:
-    lda #MODO_SELECT
-    cmp modoAtual
+    lda modoAtual
+    cmp #MODO_SELECT
     beq FimScanline
     ; outros modos aqui
     
@@ -146,6 +190,8 @@ IncrementaRandom:
     sty digito0                       ; Estourou centena, zera todo mundo
     sty digito1
     sty digito2
+
+;;;;; OVERSCAN ;;;;;
 
 FimScanline:
     sta WSYNC                     ; Aguarda o final do scanline
