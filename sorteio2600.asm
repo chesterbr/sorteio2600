@@ -81,7 +81,11 @@ SelectPressionado:
     lda #MODO_SELECT              ; GAME SELECT pressionada - se já estivermos em modo select,
     cmp modoAtual                 ;   incrementa o limite, senão só muda para este modo
     bne DefineModoSelect
-    inc limiteDigito0             ; incrementa o limite (TODO: checar overflow)
+    inc limiteDigito0             ; Incrementa o limite
+    ldy #10                       ; Verifica se estourou (dígito centena=10), e neste caso, seta
+    cpy limiteDigito0             ;   ele para 1 (aproveitando que é o valor de MODO_SELECT)
+    bne DefineModoSelect
+    sta limiteDigito0           
 DefineModoSelect:
     sta modoAtual
     lda limiteDigito0
@@ -91,8 +95,12 @@ DefineModoSelect:
     sta digito2
     jmp FimDefineModoAtual ; TODO mudar pra beq (ganha 1 byte)
 ResetPressionado:
-    lda #MODO_RODANDO             ; Começa a rodar (TODO incluir semente de randomizacao)
+    lda #MODO_RODANDO             ; Começa a rodar os dígitos
     sta modoAtual
+    lda #0                        ; Zera valores atuais (TODO incluir semente de randomizacao)
+    sta digito0
+    sta digito1
+    sta digito2
 FimDefineModoAtual:
     stx valorSelectReset          ; Guarda o status das chaves pro próximo frame
     sta WSYNC
@@ -173,8 +181,8 @@ DecideValorDigitos:
     beq FimScanline
     ; outros modos aqui
     
-IncrementaRandom:
-    lda #10
+IncrementaDigitos:
+    lda #10                           ; Dígitos "estouram" quando chegam a 10
     ldy #0
     inc digito2                       ; Incrementa unidade
     cmp digito2
@@ -185,6 +193,7 @@ IncrementaRandom:
     bne FimScanline
     sty digito1                       ; Estourou dezena, incrementa centena
     inc digito0
+    lda limiteDigito0                 ; (o estouro da centena não é no 10, e sim no limte)
     cmp digito0
     bne FimScanline
     sty digito0                       ; Estourou centena, zera todo mundo
