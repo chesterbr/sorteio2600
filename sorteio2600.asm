@@ -1,13 +1,13 @@
 ;
 ; sorteio.asm
 ;
-; Programa que sorteia um número de três dígitos feito para o
+; Programa que sorteia um número de três dígitos, feito para o
 ; evento Dev In Vale
 ;
 ; O código é livre (vide final do arquivo). Para compilar use o DASM
 ; (http://dasm-dillon.sourceforge.net/), através do comando:
 ;
-;   dasm hello.asm -ohello.bin -f3
+;   dasm sorteio.asm -osorteio.bin -f3
 ;
 
     PROCESSOR 6502
@@ -15,9 +15,10 @@
 
 ; Constantes
 SCANLINES_POR_LINHA      = 4
-MODO_SELECT              = %001
-MODO_RODANDO             = %010
-MODO_PARANDO             = %100
+MODO_SELECT              = %0001   ; Mostra/altera o limite superior (GAME_SELECT)
+MODO_RODANDO             = %0010   ; Incrementa os dígitos a cada scanline vazia da tela
+MODO_PARANDO             = %0100   ; Incrementa um dígito a cada n frames (FIRE)
+MODO_PARADO              = %1000   ; Não incrementa mais os dígitos
 CHAVE_GAME_SELECT        = %10
 CHAVE_GAME_RESET         = %01
 CHAVES_GAME_SELECT_RESET = %11
@@ -32,7 +33,7 @@ indiceIMGD2         = $85
 contadorAlturaLinha = $86         ; Contador de altura (em scanlines) da linha atual
 modoAtual           = $87         ; Indica se estamos em MODO_SELECT (escolhendo o limite
                                   ;   máximo do sorteio), MODO_RODANDO (animando em velocidade
-                                  ;   total) ou MODO_PARANDO (reduzindo até sortear)
+                                  ;   total), MODO_PARANDO (reduzindo até parar) ou MODO_PARADO
 limiteDigito0       = $88         ; Valor máximo para a centena do número sorteado
 valorSelectReset    = $89         ; Guarda status das chaves select/reset no frame anterior
                                   ;   (armazenando os bits correspondentes a eles do SWCHB)
