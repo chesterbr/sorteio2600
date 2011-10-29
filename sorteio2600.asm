@@ -15,23 +15,34 @@
 
 ; Constantes
 SCANLINES_POR_LINHA = 4
+MODO_SELECT         = %001
+MODO_RODANDO        = %010
+MODO_PARANDO        = %100
 
 ; RAM (variáveis)
-digito0             = $80         ; Valor absoluto dos dígitos 0, 1 e 2 (0-9) para
-digito1             = $81         ;   o número sorteado atual
-digito2             = $82
+digito0             = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
+digito1             = $81         ; Dezena  (0 a 9) exibida na tela usando PF1+PF2
+digito2             = $82         ; Unidade (0 a 9) exibida na tela usando PF2
 indiceIMGD0         = $83         ; Índice dos dígitos 0, 1 e 2 nas tabelas de
 indiceIMGD1         = $84         ;   imagens para a scanline atual
 indiceIMGD2         = $85
 contadorAlturaLinha = $86         ; Contador de altura (em scanlines) da linha atual
+modoAtual           = $87         ; Indica se estamos em MODO_SELECT (escolhendo o limite
+                                  ;   máximo do sorteio), MODO_RODANDO (animando em velocidade
+                                  ;   total) ou MODO_PARANDO (reduzindo até sortear)
+limiteDigito0       = $88         ; Valor máximo para a centena do número sorteado
 
 
 ; ROM    
     ORG $F000                     ; Início do cartucho (vide Mapa de Memória do Atari)
     
 InicializaRAM:
-    lda #0
+    lda #MODO_SELECT              ; Ao ligar, começa em MODO_SELECT com o valor 100, i.e.:
+    sta modoAtual
+    lda #1                        ;   - centena (e limite máximo) no 1;
+    sta limiteDigito0
     sta digito0
+    lda #0                        ;   - dezena e unidade no 0.
     sta digito1
     sta digito2
 
@@ -89,7 +100,7 @@ FinalizaVBLANK:
     
 Scanline:
     cpx #[SCANLINES_POR_LINHA*8]  ; Se estamos na parte superior desenha os digitos, caso
-    bcs IncrementaRandom          ; contrário incrementa eles a cada scanline (para randomizar)
+    bcs DecideValorDigitos          ; contrário incrementa (ou não) conforme o modo atual
     
 DesenhaDigitos:
     ldy indiceIMGD0               ; Parte do D0 vai no PF0
@@ -111,6 +122,12 @@ DesenhaDigitos:
     inc indiceIMGD1
     inc indiceIMGD2
     jmp FimScanline
+    
+DecideValorDigitos:
+    lda #MODO_SELECT
+    cmp modoAtual
+    beq FimScanline
+    ; outros modos aqui
     
 IncrementaRandom:
     lda #10
