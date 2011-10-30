@@ -25,26 +25,33 @@ CHAVES_GAME_SELECT_RESET  = %11
 MAX_FRAMES_POR_INCREMENTO = 25
 
 ; RAM (variáveis)
-digito0             = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
-digito1             = $81         ; Dezena  (0 a 9) exibida na tela usando PF1+PF2
-digito2             = $82         ; Unidade (0 a 9) exibida na tela usando PF2
-indiceIMGD0         = $83         ; Índice dos dígitos 0, 1 e 2 nas tabelas de
-indiceIMGD1         = $84         ;   imagens para a scanline atual
-indiceIMGD2         = $85
-contadorAlturaLinha = $86         ; Contador de altura (em scanlines) da linha atual
-modoAtual           = $87         ; Indica se estamos em MODO_SELECT (escolhendo o limite
-                                  ;   máximo do sorteio), MODO_RODANDO (animando em velocidade
-                                  ;   total), MODO_PARANDO (reduzindo até parar) ou MODO_PARADO
-limiteDigito0       = $88         ; Valor máximo para a centena do número sorteado
-valorSelectReset    = $89         ; Guarda status das chaves select/reset no frame anterior
-                                  ;   (armazenando os bits correspondentes a eles do SWCHB)
-framesPorIncremento = $8A         ; Quantidade de frames que vamos aguardar antes de um incremento
-                                  ;   (apenas no MODO_PARANDO)
-contadorFrames      = $8B         ; Contador regressivo de frames (framesPorIncremento a 0) para
-                                  ;   o MODO_PARANDO
-flagIncrementaDigito = $8C        ; No MODO_PARANDO, informa ao kernel que o dígito deve ser
-                                  ;   incrementado (uma única vez)
-contadorSom = $8D                                  
+digito0              = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
+digito1              = $81         ; Dezena  (0 a 9) exibida na tela usando PF1+PF2
+digito2              = $82         ; Unidade (0 a 9) exibida na tela usando PF2
+indiceIMGD0          = $83         ; Índice dos dígitos 0, 1 e 2 nas tabelas de
+indiceIMGD1          = $84         ;   imagens para a scanline atual
+indiceIMGD2          = $85
+contadorAlturaLinha  = $86         ; Contador de altura (em scanlines) da linha atual
+modoAtual            = $87         ; Indica se estamos em MODO_SELECT (escolhendo o limite
+                                   ;   máximo do sorteio), MODO_RODANDO (animando em velocidade
+                                   ;   total), MODO_PARANDO (reduzindo até parar) ou MODO_PARADO
+limiteDigito0        = $88         ; Valor máximo para a centena do número sorteado
+valorSelectReset     = $89         ; Guarda status das chaves select/reset no frame anterior
+                                   ;   (armazenando os bits correspondentes a eles do SWCHB)
+framesPorIncremento  = $8A         ; Quantidade de frames que vamos aguardar antes de um incremento
+                                   ;   (apenas no MODO_PARANDO)
+contadorFrames       = $8B         ; Contador regressivo de frames (framesPorIncremento a 0) para
+                                   ;   o MODO_PARANDO
+flagAtualizaDigito   = $8C         ; No MODO_PARANDO, informa ao kernel que o dígito deve ser
+                                   ;   incrementado (uma única vez). 
+flagResetDigitos    = $8D          ; No MODO_RESET, informa que
+                                   ;   os digitos devem ser inicializados com as sementes.
+contadorSom          = $8E         ; Conta # de frames em que o som deve se manter ligado
+sementeRandom        = $8F         ; Semente usada para inicializar a dezena/unidade e garantir a
+                                   ;   aleatoriedade. É necessário porque incrementamos a cada
+                                   ;   scanline e paramos a contagem sempre no início da tela -
+                                   ;   se começarmos sempre no final 00, vamos ter um subconjungo
+                                   ;   fixo de possíveis resultados
 
 ; ROM    
     ORG $F000                     ; Início do cartucho (vide Mapa de Memória do Atari)
@@ -59,15 +66,16 @@ InicializaRAM:
     sta digito1
     sta digito2
     sta valorSelectReset          ; Console ligado sem nenhuma chave
-    sta flagIncrementaDigito
+    sta flagAtualizaDigito
+    sta sementeRandom             ; É preciso inicializar para evitar dígitos não-decimais
     
 InicializaSom:
     lda #10                       ; Som mais "percussivo"
     sta AUDC0
-	lda #40                       ; Pitch escolhido bem aleatoriamente, confesso
-	sta AUDF0
+    lda #40                       ; Pitch escolhido bem aleatoriamente, confesso
+    sta AUDF0
     lda #0                        ; Vamos variar o volume para fazer o som, começa desligado
-	sta AUDV0 
+    sta AUDV0 
 
 
 ;;;;; VSYNC ;;;;
@@ -98,27 +106,19 @@ DefineChavePressionada:
 SelectPressionado:
     lda #MODO_SELECT              ; GAME SELECT pressionada - se já estivermos em modo select,
     cmp modoAtual                 ;   incrementa o limite, senão só muda para este modo
-    bne DefineModoSelect
-    inc limiteDigito0             ; Incrementa o limite
-    ldy #10                       ; Verifica se estourou (dígito centena=10), e neste caso, seta
-    cpy limiteDigito0             ;   ele para 1 (aproveitando que é o valor de MODO_SELECT)
-    bne DefineModoSelect
-    sta limiteDigito0           
-DefineModoSelect:
+    bne SetaModoSelect
+    inc limiteDigito0             ; Incrementa o limite do dígito da centena, que é o valor que
+    ldy #11                       ;   ele não pode atingir. Se passar de 10 (limite para
+    cpy limiteDigito0             ;   centena = 9), volta ele para 1
+    bne FimProcessaChaves
+    sta limiteDigito0             ; "lda #1" suprimido, aproveitando que MODO_SELECT=1
+SetaModoSelect:
     sta modoAtual
-    lda limiteDigito0
-    sta digito0
-    lda #0
-    sta digito1
-    sta digito2
-    jmp FimProcessaChaves ; TODO mudar pra beq (ganha 1 byte)
+    jmp FimProcessaChaves
 ResetPressionado:
     lda #MODO_RODANDO             ; Começa a rodar os dígitos
     sta modoAtual
-    lda #0                        ; Zera valores atuais (TODO incluir semente de randomizacao)
-    sta digito0
-    sta digito1
-    sta digito2
+    sta flagResetDigitos          ; ...mas antes garante que eles serão ressetados com a semente
 FimProcessaChaves:
     stx valorSelectReset          ; Guarda o status das chaves pro próximo frame
     sta WSYNC
@@ -151,7 +151,7 @@ MudaParaModoParado:
 ResetContadorFrames:    
     lda framesPorIncremento       ; Garante que iremos aguardar tantos frames quanto indicado
     sta contadorFrames            ;   pelo valor atual de framesPorIncremento antes de incrementar
-    sta flagIncrementaDigito      ; Executa um incremento no frame atual
+    sta flagAtualizaDigito        ; Executa um incremento no frame atual
 FimModoParando:
     sta WSYNC    
 
@@ -171,7 +171,39 @@ AjustaCores:                      ; Quarta linha do VBLANK
     ldx #0                        ; X é o nosso contador de scanlines (0-191)
     sta WSYNC
     
-PreparaIndicesEContadores:        ; Quinta linha do VBLANK
+AjustaDigitos                     ; Quinta linha do VBLANK
+    lda modoAtual
+    cmp #MODO_SELECT
+    beq AjustaDigitosSelect
+    cmp #MODO_RODANDO
+    bne FimAjustaDigitos
+AjustaDigitosAposReset
+    lda flagResetDigitos          ; Se acabamos de dar um RESET, a flag estará ligado, e vamos
+    beq FimAjustaDigitos          ;   colocar cada nibble de uma semente (BCD) no dígito apropriado
+    lda sementeRandom             ; digito1 = nibble da direita da semente
+    and #%00001111 
+    sta digito1
+    lda sementeRandom             ; digito2 = nibble da esquerda da semente
+    lsr
+    lsr
+    lsr
+    lsr
+    sta digito2
+    lda #0                        
+    sta digito0                   ; digito0 = 0 (depende do limite, e não tem prob de entropia)
+    sta flagResetDigitos          ; Reset da flag
+    jmp FimAjustaDigitos
+AjustaDigitosSelect
+    lda limiteDigito0             ; Os dígitos do MODO_SELECT informam o limite superior, i.e.:
+    sta digito0                   ;   a centena tem que ser um a menos que o limite
+    dec digito0
+    lda #9                        ;   e a dezena/unidade têm que ser "9"
+    sta digito1
+    sta digito2
+FimAjustaDigitos:
+    sta WSYNC
+
+PreparaIndicesEContadores:        ; Sexta linha do VBLANK
     lda digito0                   ; Posicao na tabela é 8 vezes o valor do dígito
     asl                           ; 3 shifts = 8 vezes
     asl
@@ -192,7 +224,7 @@ PreparaIndicesEContadores:        ; Quinta linha do VBLANK
     sta WSYNC
 
 FinalizaVBLANK:
-    REPEAT 32                     ; VBLANK tem 37 linhas, mas usamos 5 acima
+    REPEAT 31                     ; VBLANK tem 37 linhas, mas usamos 6 acima
         sta WSYNC     
     REPEND
     lda #0                        ; Finaliza o VBLANK, "ligando o canhão"
@@ -229,21 +261,22 @@ DecideIncremento:
     lda modoAtual
     cmp #MODO_RODANDO             ; No MODO_RODANDO incrementamos o dígito para cada scanline
     beq IncrementaDigitos
+    beq FimScanline
     cmp #MODO_PARANDO             ; No MODO_SELECT e MODO_PARADO nunca incrementamos o dígito
     bne FimScanline
-    lda flagIncrementaDigito      ; No MODO_PARANDO incrementamos o dígito apenas quando a
+    lda flagAtualizaDigito        ; No MODO_PARANDO incrementamos o dígito apenas quando a
     beq FimScanline               ;   flag indicar que isso deve ser feito (com valor não-zero)   
     
 IncrementaDigitos:
 SomIncremento:
     lda #8                        ; Basta aumentar o volume (no final do frame ele vai ser desligado)
-	sta AUDV0
-	lda #200
-	sta contadorSom
+    sta AUDV0
+    lda #200
+    sta contadorSom
 LogicaIncremento:
     lda #10                           ; Dígitos "estouram" quando chegam a 10
     ldy #0
-    sty flagIncrementaDigito          ; Se incrementou porque a flag foi acionada, desliga
+    sty flagAtualizaDigito            ; Se incrementou porque a flag foi acionada, desliga
     inc digito2                       ; Incrementa unidade
     cmp digito2
     bne FimScanline
@@ -267,6 +300,14 @@ FimScanline:
     bne Scanline
  
 ;;;;; OVERSCAN ;;;;;
+
+IncrementaSemente:
+    sed                           ; Modo decimal (para termos dois dígitos)
+    lda sementeRandom
+    clc
+    adc #1
+    sta sementeRandom
+    cld                           ; Volta ao modo de aritmética normal
 
 DesligaSom:
     lda contadorSom
