@@ -22,7 +22,7 @@ MODO_PARADO               = %1000   ; Não incrementa mais os dígitos
 CHAVE_GAME_SELECT         = %10
 CHAVE_GAME_RESET          = %01
 CHAVES_GAME_SELECT_RESET  = %11
-MAX_FRAMES_POR_INCREMENTO = 20
+MAX_FRAMES_POR_INCREMENTO = 25
 
 ; RAM (variáveis)
 digito0             = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
@@ -44,6 +44,7 @@ contadorFrames      = $8B         ; Contador regressivo de frames (framesPorIncr
                                   ;   o MODO_PARANDO
 flagIncrementaDigito = $8C        ; No MODO_PARANDO, informa ao kernel que o dígito deve ser
                                   ;   incrementado (uma única vez)
+contadorSom = $8D                                  
 
 ; ROM    
     ORG $F000                     ; Início do cartucho (vide Mapa de Memória do Atari)
@@ -59,6 +60,15 @@ InicializaRAM:
     sta digito2
     sta valorSelectReset          ; Console ligado sem nenhuma chave
     sta flagIncrementaDigito
+    
+InicializaSom:
+    lda #10                       ; Som mais "percussivo"
+    sta AUDC0
+	lda #40                       ; Pitch escolhido bem aleatoriamente, confesso
+	sta AUDF0
+    lda #0                        ; Vamos variar o volume para fazer o som, começa desligado
+	sta AUDV0 
+
 
 ;;;;; VSYNC ;;;;
 
@@ -225,6 +235,12 @@ DecideIncremento:
     beq FimScanline               ;   flag indicar que isso deve ser feito (com valor não-zero)   
     
 IncrementaDigitos:
+SomIncremento:
+    lda #8                        ; Basta aumentar o volume (no final do frame ele vai ser desligado)
+	sta AUDV0
+	lda #200
+	sta contadorSom
+LogicaIncremento:
     lda #10                           ; Dígitos "estouram" quando chegam a 10
     ldy #0
     sty flagIncrementaDigito          ; Se incrementou porque a flag foi acionada, desliga
@@ -252,9 +268,16 @@ FimScanline:
  
 ;;;;; OVERSCAN ;;;;;
 
+DesligaSom:
+    lda contadorSom
+    beq Overscan
+    dec contadorSom
+    lda #0
+    sta AUDV0
+
 Overscan:
     lda #%01000010                ; "Desliga o canhão:"
-    sta VBLANK                    ; 
+    sta VBLANK                    
     REPEAT 30                     ; 30 scanlines de overscan...
         sta WSYNC
     REPEND
