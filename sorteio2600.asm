@@ -66,18 +66,18 @@ InicioFrame:
 
 ;;;;; VBLANK ;;;;;    
 
-DefineModoAtual:                  ; Primeira linha do VBLANK
+ProcessaChavesSelectEReset:       ; Primeira linha do VBLANK
     lda SWCHB                     ; Carrega status das chaves GAME SELECT/GAME RESET no A,
     and #CHAVES_GAME_SELECT_RESET ;   zerando bits que não sejam estes
     eor #CHAVES_GAME_SELECT_RESET ; Inverte status (para ficar 1=pressionado, 0=solto)
     tax                           ; Copia pro X para guardar o valor no final
     cmp valorSelectReset
-    beq FimDefineModoAtual        ; Nenhuma chave pressionada/solta, vai pra próxima
+    beq FimProcessaChaves         ; Nenhuma chave pressionada/solta, vai pra próxima
 DefineChavePressionada:
     cmp #CHAVE_GAME_RESET
     beq ResetPressionado
     cmp #CHAVE_GAME_SELECT
-    bne FimDefineModoAtual
+    bne FimProcessaChaves
 SelectPressionado:
     lda #MODO_SELECT              ; GAME SELECT pressionada - se já estivermos em modo select,
     cmp modoAtual                 ;   incrementa o limite, senão só muda para este modo
@@ -94,7 +94,7 @@ DefineModoSelect:
     lda #0
     sta digito1
     sta digito2
-    jmp FimDefineModoAtual ; TODO mudar pra beq (ganha 1 byte)
+    jmp FimProcessaChaves ; TODO mudar pra beq (ganha 1 byte)
 ResetPressionado:
     lda #MODO_RODANDO             ; Começa a rodar os dígitos
     sta modoAtual
@@ -102,11 +102,22 @@ ResetPressionado:
     sta digito0
     sta digito1
     sta digito2
-FimDefineModoAtual:
+FimProcessaChaves:
     stx valorSelectReset          ; Guarda o status das chaves pro próximo frame
     sta WSYNC
+    
+ProcessaBotaoJoystick:            ; Segunda linha do VBLANK
+    lda modoAtual                 ; Se estamos no MODO_RODANDO...
+    cmp #MODO_RODANDO
+    bne FimProcessaBotaoJoystick
+    lda INPT4                     ; ...e o botão do joystick foi presionado...
+    bmi FimProcessaBotaoJoystick
+    lda #MODO_PARADO              ; ...muda para o modo parado (TODO: mudar para o modo parando)
+    sta modoAtual    
+FimProcessaBotaoJoystick:
+    sta WSYNC
 
-AjustaCores:                      ; Segunda linha do VBLANK
+AjustaCores:                      ; Terceira linha do VBLANK
     lda #$00        
     sta ENABL                     ; Desliga a ball, os missiles e os players
     sta ENAM0
@@ -122,7 +133,7 @@ AjustaCores:                      ; Segunda linha do VBLANK
     ldx #0                        ; X é o nosso contador de scanlines (0-191)
     sta WSYNC
     
-AjustaDigitos:                    ; Terceira linha do VBLANK
+PreparaIndicesEContadores:        ; Quarta linha do VBLANK
     lda digito0                   ; Posicao na tabela é 8 vezes o valor do dígito
     asl                           ; 3 shifts = 8 vezes
     asl
@@ -143,7 +154,7 @@ AjustaDigitos:                    ; Terceira linha do VBLANK
     sta WSYNC
 
 FinalizaVBLANK:
-    REPEAT 34                     ; VBLANK tem 37 linhas, mas usamos 3 acima
+    REPEAT 33                     ; VBLANK tem 37 linhas, mas usamos 4 acima
         sta WSYNC     
     REPEND
     lda #0                        ; Finaliza o VBLANK, "ligando o canhão"
@@ -180,7 +191,10 @@ DecideValorDigitos:
     lda modoAtual
     cmp #MODO_SELECT
     beq FimScanline
-    ; outros modos aqui
+    cmp #MODO_PARADO
+    beq FimScanline
+
+ModoParando:
     
 IncrementaDigitos:
     lda #10                           ; Dígitos "estouram" quando chegam a 10
