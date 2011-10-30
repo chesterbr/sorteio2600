@@ -14,14 +14,15 @@
     INCLUDE "vcs.h"
 
 ; Constantes
-SCANLINES_POR_LINHA      = 4
-MODO_SELECT              = %0001   ; Mostra/altera o limite superior (GAME_SELECT)
-MODO_RODANDO             = %0010   ; Incrementa os dígitos a cada scanline vazia da tela
-MODO_PARANDO             = %0100   ; Incrementa um dígito a cada n frames (FIRE)
-MODO_PARADO              = %1000   ; Não incrementa mais os dígitos
-CHAVE_GAME_SELECT        = %10
-CHAVE_GAME_RESET         = %01
-CHAVES_GAME_SELECT_RESET = %11
+SCANLINES_POR_LINHA       = 4
+MODO_SELECT               = %0001   ; Mostra/altera o limite superior (GAME_SELECT)
+MODO_RODANDO              = %0010   ; Incrementa os dígitos a cada scanline vazia da tela
+MODO_PARANDO              = %0100   ; Incrementa um dígito a cada n frames (FIRE)
+MODO_PARADO               = %1000   ; Não incrementa mais os dígitos
+CHAVE_GAME_SELECT         = %10
+CHAVE_GAME_RESET          = %01
+CHAVES_GAME_SELECT_RESET  = %11
+MAX_FRAMES_POR_INCREMENTO = 20
 
 ; RAM (variáveis)
 digito0             = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
@@ -37,7 +38,12 @@ modoAtual           = $87         ; Indica se estamos em MODO_SELECT (escolhendo
 limiteDigito0       = $88         ; Valor máximo para a centena do número sorteado
 valorSelectReset    = $89         ; Guarda status das chaves select/reset no frame anterior
                                   ;   (armazenando os bits correspondentes a eles do SWCHB)
-
+framesPorIncremento = $8A         ; Quantidade de frames que vamos aguardar antes de um incremento
+                                  ;   (apenas no MODO_PARANDO)
+contadorFrames      = $8B         ; Contador regressivo de frames (framesPorIncremento a 0) para
+                                  ;   o MODO_PARANDO
+flagIncrementaDigito = $8C        ; No MODO_PARANDO, informa ao kernel que o dígito deve ser
+                                  ;   incrementado (uma única vez)
 
 ; ROM    
     ORG $F000                     ; Início do cartucho (vide Mapa de Memória do Atari)
@@ -52,6 +58,7 @@ InicializaRAM:
     sta digito1
     sta digito2
     sta valorSelectReset          ; Console ligado sem nenhuma chave
+    sta flagIncrementaDigito
 
 ;;;;; VSYNC ;;;;
 
@@ -112,12 +119,33 @@ ProcessaBotaoJoystick:            ; Segunda linha do VBLANK
     bne FimProcessaBotaoJoystick
     lda INPT4                     ; ...e o botão do joystick foi presionado...
     bmi FimProcessaBotaoJoystick
-    lda #MODO_PARADO              ; ...muda para o modo parado (TODO: mudar para o modo parando)
-    sta modoAtual    
+    lda #MODO_PARANDO             ; ...muda para o modo parando, começando por 2 frames
+    sta modoAtual                 ;   por incremento
+    lda #2
+    sta framesPorIncremento
+    sta contadorFrames
 FimProcessaBotaoJoystick:
     sta WSYNC
+    
+ModoParando:                      ; Terceira linha do VBLANK
+    dec contadorFrames            ; Marca que um frame dos que faltavam passou
+    bne FimModoParando            ; Se passamos os frames que faltavam, aumenta a quantidade
+    inc framesPorIncremento       ;   de frames por incremento
+    lda framesPorIncremento
+    cmp #MAX_FRAMES_POR_INCREMENTO
+    bne ResetContadorFrames
+MudaParaModoParado:              
+    lda #MODO_PARADO              ; Se chegamos no limite de lentidão, muda para o modo parado
+    sta modoAtual
+    jmp FimModoParando
+ResetContadorFrames:    
+    lda framesPorIncremento       ; Garante que iremos aguardar tantos frames quanto indicado
+    sta contadorFrames            ;   pelo valor atual de framesPorIncremento antes de incrementar
+    sta flagIncrementaDigito      ; Executa um incremento no frame atual
+FimModoParando:
+    sta WSYNC    
 
-AjustaCores:                      ; Terceira linha do VBLANK
+AjustaCores:                      ; Quarta linha do VBLANK
     lda #$00        
     sta ENABL                     ; Desliga a ball, os missiles e os players
     sta ENAM0
@@ -133,7 +161,7 @@ AjustaCores:                      ; Terceira linha do VBLANK
     ldx #0                        ; X é o nosso contador de scanlines (0-191)
     sta WSYNC
     
-PreparaIndicesEContadores:        ; Quarta linha do VBLANK
+PreparaIndicesEContadores:        ; Quinta linha do VBLANK
     lda digito0                   ; Posicao na tabela é 8 vezes o valor do dígito
     asl                           ; 3 shifts = 8 vezes
     asl
@@ -154,7 +182,7 @@ PreparaIndicesEContadores:        ; Quarta linha do VBLANK
     sta WSYNC
 
 FinalizaVBLANK:
-    REPEAT 33                     ; VBLANK tem 37 linhas, mas usamos 4 acima
+    REPEAT 32                     ; VBLANK tem 37 linhas, mas usamos 5 acima
         sta WSYNC     
     REPEND
     lda #0                        ; Finaliza o VBLANK, "ligando o canhão"
@@ -164,7 +192,7 @@ FinalizaVBLANK:
     
 Scanline:
     cpx #[SCANLINES_POR_LINHA*8]  ; Se estamos na parte superior desenha os digitos, caso
-    bcs DecideValorDigitos          ; contrário incrementa (ou não) conforme o modo atual
+    bcs DecideIncremento          ;   contrário incrementa (ou não, conforme o modo atual)
     
 DesenhaDigitos:
     ldy indiceIMGD0               ; Parte do D0 vai no PF0
@@ -187,18 +215,19 @@ DesenhaDigitos:
     inc indiceIMGD2
     jmp FimScanline
     
-DecideValorDigitos:
+DecideIncremento:
     lda modoAtual
-    cmp #MODO_SELECT
-    beq FimScanline
-    cmp #MODO_PARADO
-    beq FimScanline
-
-ModoParando:
+    cmp #MODO_RODANDO             ; No MODO_RODANDO incrementamos o dígito para cada scanline
+    beq IncrementaDigitos
+    cmp #MODO_PARANDO             ; No MODO_SELECT e MODO_PARADO nunca incrementamos o dígito
+    bne FimScanline
+    lda flagIncrementaDigito      ; No MODO_PARANDO incrementamos o dígito apenas quando a
+    beq FimScanline               ;   flag indicar que isso deve ser feito (com valor não-zero)   
     
 IncrementaDigitos:
     lda #10                           ; Dígitos "estouram" quando chegam a 10
     ldy #0
+    sty flagIncrementaDigito          ; Se incrementou porque a flag foi acionada, desliga
     inc digito2                       ; Incrementa unidade
     cmp digito2
     bne FimScanline
@@ -215,14 +244,14 @@ IncrementaDigitos:
     sty digito1
     sty digito2
 
-;;;;; OVERSCAN ;;;;;
-
 FimScanline:
     sta WSYNC                     ; Aguarda o final do scanline
     inx                           ; Incrementa o contador e repete até completar a tela
     cpx #191
     bne Scanline
  
+;;;;; OVERSCAN ;;;;;
+
 Overscan:
     lda #%01000010                ; "Desliga o canhão:"
     sta VBLANK                    ; 
