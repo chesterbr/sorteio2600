@@ -179,8 +179,25 @@ ResetContadorFrames:
 FimModoParando:
     sta WSYNC    
 
-AjustaCoresEPosicoes:             ; Quarta linha do VBLANK
+MiscStuff:                        ; Quarta linha do VBlank
+IncrementaSemente:        
+    sed                           ; Modo decimal (para termos dois dígitos)
+    lda sementeRandom
+    clc
+    adc #1
+    sta sementeRandom
+    cld                           ; Volta ao modo de aritmética normal
+DesligaSom:
+    lda contadorSom
+    beq FimMiscStuff
+    dec contadorSom
+    lda #0
+    sta AUDV0
+FimMiscStuff:
     sta WSYNC
+
+
+
     
 AjustaDigitos                     ; Quinta linha do VBLANK
     lda modoAtual
@@ -312,21 +329,6 @@ FimScanline:
     bne Scanline
  
 ;;;;; OVERSCAN ;;;;;
-
-IncrementaSemente:
-    sed                           ; Modo decimal (para termos dois dígitos)
-    lda sementeRandom
-    clc
-    adc #1
-    sta sementeRandom
-    cld                           ; Volta ao modo de aritmética normal
-
-DesligaSom:
-    lda contadorSom
-    beq Overscan
-    dec contadorSom
-    lda #0
-    sta AUDV0
 
 Overscan:
     lda #%01000010                ; "Desliga o canhão:"
