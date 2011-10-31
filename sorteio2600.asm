@@ -312,6 +312,8 @@ LogicaIncremento:
     cmp digito2
     bne FimScanline
     sty digito2                       ; Estourou unidade, incrementa dezena
+    sta WSYNC                         ; A essa altura já queimamos quase uma scanline,
+    inx                               ;   vamos usar a próxima, incrementando o contador
     inc digito1
     cmp digito1
     bne FimScanline
