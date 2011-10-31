@@ -14,7 +14,7 @@
     INCLUDE "vcs.h"
 
 ; Constantes
-SCANLINES_POR_LINHA       = 4
+SCANLINES_POR_LINHA       = 6       ; Quantas scanlines cada linha do desenho do dígito deve ter
 MODO_SELECT               = %0001   ; Mostra/altera o limite superior (GAME_SELECT)
 MODO_RODANDO              = %0010   ; Incrementa os dígitos a cada scanline vazia da tela
 MODO_PARANDO              = %0100   ; Incrementa um dígito a cada n frames (FIRE)
@@ -55,19 +55,22 @@ sementeRandom        = $8F         ; Semente usada para inicializar a dezena/uni
 
 ; ROM    
     ORG $F000                     ; Início do cartucho (vide Mapa de Memória do Atari)
-    
+
+;;;;; Inicialização do cartucho (roda só uma vez) ;;;;;
+
 InicializaRAM:
-    lda #MODO_SELECT              ; Ao ligar, começa em MODO_SELECT com o valor 100, i.e.:
+    ldx #0                        ; Começa limpando toda a RAM e registros do TIA
+    lda #0
+LoopZeraVariaveisERegistros:
+    sta 0,x
+    inx
+    bne LoopZeraVariaveisERegistros
+VariaveisNaoZero:
+    lda #MODO_SELECT              ; Ao ligar o Atari, vamos começar no modo select...
     sta modoAtual
-    lda #1                        ;   - centena (e limite máximo) no 1;
+    lda #1                        ; ...e com o limite em 100 (i.e., sorteando de 000 a 099)
     sta limiteDigito0
     sta digito0
-    lda #0                        ;   - dezena e unidade no 0.
-    sta digito1
-    sta digito2
-    sta valorSelectReset          ; Console ligado sem nenhuma chave
-    sta flagAtualizaDigito
-    sta sementeRandom             ; É preciso inicializar para evitar dígitos não-decimais
     
 InicializaSom:
     lda #10                       ; Som mais "percussivo"
@@ -76,9 +79,30 @@ InicializaSom:
     sta AUDF0
     lda #0                        ; Vamos variar o volume para fazer o som, começa desligado
     sta AUDV0 
+    
+InicializaGraficos:
+    sta WSYNC                     ; Vamos usar um missle para cobrir um pedacinho do playfield
+    ldy #8                        ;   que aparece por conta da imprecisão do Score Mode, e pra
+LoopPosicaoMissile:               ;   isso é preciso contar os ciclos para posicionar
+    dey
+    bne LoopPosicaoMissile
+    sta RESM0                     ; Posiciona o missile *quase* no lugar certo
+    lda #%00110000                ; Stretch do missile 
+    sta NUSIZ0                    
+    lda #%11000000                ; Deslocamento para corrigir o "quase" acima
+    sta WSYNC
+    sta HMM0
+    sta HMOVE                     ; Executa o deslocamento
+    sta WSYNC
+    lda #$FF                      
+    sta COLUP1                    ; Playfield amarelo
+    sta ENAM0                     ; Habilita missile
+    lda #%00000010                ; Score mode=1; 
+    sta CTRLPF    
+    
 
 
-;;;;; VSYNC ;;;;
+;;;;; VSYNC ;;;;;
 
 InicioFrame:
     lda #%00000010                ; VSYNC inicia setando o bit 1 deste endereço
@@ -155,20 +179,7 @@ ResetContadorFrames:
 FimModoParando:
     sta WSYNC    
 
-AjustaCores:                      ; Quarta linha do VBLANK
-    lda #$00        
-    sta ENABL                     ; Desliga a ball, os missiles e os players
-    sta ENAM0
-    sta ENAM1
-    sta GRP0
-    sta GRP1
-    sta COLUBK                    ; Cor de fundo (preto)
-    sta COLUP0                    ; Cor do P0 (preto, pro score mode)
-    lda #$FF                      ; Cor do playfield (possivelmente amarelo)
-    sta COLUP1      
-    lda #$02                      ; Reflection=0, Score mode=1
-    sta CTRLPF    
-    ldx #0                        ; X é o nosso contador de scanlines (0-191)
+AjustaCoresEPosicoes:             ; Quarta linha do VBLANK
     sta WSYNC
     
 AjustaDigitos                     ; Quinta linha do VBLANK
@@ -221,6 +232,7 @@ PreparaIndicesEContadores:        ; Sexta linha do VBLANK
     sta indiceIMGD2
     lda #SCANLINES_POR_LINHA      ; Inicaliza contador de altura da linha
     sta contadorAlturaLinha
+    ldx #0                        ; X é o nosso contador de scanlines (0-191)
     sta WSYNC
 
 FinalizaVBLANK:
