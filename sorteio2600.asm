@@ -293,7 +293,6 @@ DecideIncremento:
     lda modoAtual
     cmp #MODO_RODANDO             ; No MODO_RODANDO incrementamos o dígito para cada scanline
     beq IncrementaDigitos
-    beq FimScanline
     cmp #MODO_PARANDO             ; No MODO_SELECT e MODO_PARADO nunca incrementamos o dígito
     bne FimScanline
     lda flagAtualizaDigito        ; No MODO_PARANDO incrementamos o dígito apenas quando a
