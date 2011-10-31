@@ -162,6 +162,9 @@ FimProcessaBotaoJoystick:
     sta WSYNC
     
 ModoParando:                      ; Terceira linha do VBLANK
+    lda modoAtual
+    cmp #MODO_PARANDO
+    bne FimModoParando
     dec contadorFrames            ; Marca que um frame dos que faltavam passou
     bne FimModoParando            ; Se passamos os frames que faltavam, aumenta a quantidade
     inc framesPorIncremento       ;   de frames por incremento
