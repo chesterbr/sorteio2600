@@ -52,7 +52,7 @@ contadorSom          = $8E         ; Conta # de frames em que o som deve se mant
 sementeRandom        = $8F         ; Semente usada para inicializar a dezena/unidade e garantir a
                                    ;   aleatoriedade. É necessário porque incrementamos a cada
                                    ;   scanline e paramos a contagem sempre no início da tela -
-                                   ;   se começarmos sempre no final 00, vamos ter um subconjungo
+                                   ;   se começarmos sempre no final 00, vamos ter um subconjunto
                                    ;   fixo de possíveis resultados
 
 ; ROM    
@@ -142,7 +142,7 @@ SetaModoSelect:
 ResetPressionado:
     lda #MODO_RODANDO             ; Começa a rodar os dígitos
     sta modoAtual
-    sta flagResetDigitos          ; ...mas antes garante que eles serão ressetados com a semente
+    sta flagResetDigitos          ; ...mas garante que eles serão ressetados antes com a semente
 FimProcessaChaves:
     stx valorSelectReset          ; Guarda o status das chaves pro próximo frame
     sta WSYNC
@@ -183,10 +183,10 @@ FimModoParando:
     sta WSYNC    
 
 MiscStuff:                        ; Quarta linha do VBlank
-AjustaCor:
-    lda modoAtual
-    cmp #MODO_SELECT
-    bne CorNaoESelect
+AjustaCor:                        ; O modo select tem uma cor distinta, o rodando/parando
+    lda modoAtual                 ;   têm outra, e o parado usa a semente como cor (fazendo
+    cmp #MODO_SELECT              ;   com que o placar mude de cor a cada frame, o que é
+    bne CorNaoESelect             ;   um bom indicador de que é o resultado final).
     ldy #COR_SELECT
     jmp CorDefinida
 CorNaoESelect:
@@ -199,31 +199,28 @@ CorNaoEParado:
 CorDefinida:
     sty COLUP1                    
 IncrementaSemente:        
-    sed                           ; Modo decimal (para termos dois dígitos)
-    lda sementeRandom
-    clc
+    sed                           ; Ao invés de dar um INC, vamos mudar pro modo decimal (BCD)
+    lda sementeRandom             ;   e somar 1. Assim, sempre temos um dígito válido em cada
+    clc                           ;   nibble da semente
     adc #1
     sta sementeRandom
-    cld                           ; Volta ao modo de aritmética normal
+    cld                           ; Volta ao modo de aritmética normal, senão o caos impera
 DesligaSom:
-    lda contadorSom
-    beq FimMiscStuff
-    dec contadorSom
+    lda contadorSom               ; O som é desligado sempre que o contador zera, tornando o
+    beq FimMiscStuff              ;   que seria um tom contínuo em um "tic" para cada frame
+    dec contadorSom               ;   em que aconteça pelo menos um incremento nos dígitos.
     lda #0
     sta AUDV0
 FimMiscStuff:
     sta WSYNC
-
-
-
     
-AjustaDigitos                     ; Quinta linha do VBLANK
+AjustaDigitos:                    ; Quinta linha do VBLANK
     lda modoAtual
     cmp #MODO_SELECT
     beq AjustaDigitosSelect
     cmp #MODO_RODANDO
     bne FimAjustaDigitos
-AjustaDigitosAposReset
+AjustaDigitosAposReset:
     lda flagResetDigitos          ; Se acabamos de dar um RESET, a flag estará ligado, e vamos
     beq FimAjustaDigitos          ;   colocar cada nibble de uma semente (BCD) no dígito apropriado
     lda sementeRandom             ; digito1 = nibble da direita da semente
@@ -236,15 +233,15 @@ AjustaDigitosAposReset
     lsr
     sta digito2
     lda #0                        
-    sta digito0                   ; digito0 = 0 (depende do limite, e não tem prob de entropia)
+    sta digito0                   ; digito0 = 0 (é o único valor seguro, por conta do limite)
     sta flagResetDigitos          ; Reset da flag
     jmp FimAjustaDigitos
-AjustaDigitosSelect
+AjustaDigitosSelect:
     lda limiteDigito0             ; Os dígitos do MODO_SELECT informam o limite superior, i.e.:
-    sta digito0                   ;   a centena tem que ser um a menos que o limite
+    sta digito0                   ;   a centena (digito0) tem que ser um a menos que o limite
     dec digito0
-    lda #9                        ;   e a dezena/unidade têm que ser "9"
-    sta digito1
+    lda #9                        ;   e a dezena/unidade têm que ser "9". Ex.: para o limite
+    sta digito1                   ;   200 vamos exibir 199.
     sta digito2
 FimAjustaDigitos:
     sta WSYNC
@@ -281,17 +278,17 @@ FinalizaVBLANK:
     
 Scanline:
     cpx #[SCANLINES_POR_LINHA*8]  ; Se estamos na parte superior desenha os digitos, caso
-    bcs DecideIncremento          ;   contrário incrementa (ou não, conforme o modo atual)
+    bcs DecideIncremento          ;   contrário o modo atual decide se vai incrementar
     
 DesenhaDigitos:
-    ldy indiceIMGD0               ; Parte do D0 vai no PF0
+    ldy indiceIMGD0               ; Parte do digito0 vai no PF0
     lda (IMGD0PF0,y)
     sta PF0
-    lda (IMGD0PF1,y)              ; O restante do D0 vai no PF1, junto com parte do D1...
+    lda (IMGD0PF1,y)              ; O resto do digito0 vai no PF1, junto com parte do digito1...
     ldy indiceIMGD1
     ora (IMGD1PF1,y)
     sta PF1
-    lda (IMGD1PF2,y)              ; ...e o restante do D1 vai no PF2, junto o D2
+    lda (IMGD1PF2,y)              ; ...e o resto do digito1 vai no PF2, junto o digito2
     ldy indiceIMGD2
     ora (IMGD2PF2,y)
     sta PF2
@@ -318,29 +315,29 @@ NaoEModoRodando:
     
 IncrementaDigitos:
 SomIncremento:
-    lda #8                        ; Basta aumentar o volume (no final do frame ele vai ser desligado)
-    sta AUDV0
+    lda #8                        ; Basta aumentar o volume (o início do frame zera ele novamente
+    sta AUDV0                     ;   quando o contador zerar)
     lda #200
     sta contadorSom
 LogicaIncremento:
-    lda #10                           ; Dígitos "estouram" quando chegam a 10
+    lda #10                       ; Dígitos "estouram" quando chegam a 10
     ldy #0
-    sty flagAtualizaDigito            ; Se incrementou porque a flag foi acionada, desliga
-    inc digito2                       ; Incrementa unidade
+    sty flagAtualizaDigito        ; Se incrementou porque a flag foi acionada, desliga
+    inc digito2                   ; Incrementa unidade
     cmp digito2
     bne FimScanline
-    sty digito2                       ; Estourou unidade, incrementa dezena
+    sty digito2                   ; Estourou unidade, incrementa dezena
     inc digito1
     cmp digito1
     bne FimScanline
-    sta WSYNC                         ; A essa altura já queimamos quase uma scanline,
-    inx                               ;   vamos usar a próxima, incrementando o contador
-    sty digito1                       ; Estourou dezena, incrementa centena
+    sta WSYNC                     ; A essa altura já queimamos quase uma scanline,
+    inx                           ;   vamos usar a próxima, incrementando o contador
+    sty digito1                   ; Estourou dezena, incrementa centena
     inc digito0
-    lda limiteDigito0                 ; (o estouro da centena não é no 10, e sim no limte)
+    lda limiteDigito0             ; (o estouro da centena não é no 10, e sim no limte)
     cmp digito0
     bne FimScanline
-    sty digito0                       ; Estourou centena, zera todo mundo
+    sty digito0                   ; Estourou centena, zera todo mundo
     sty digito1
     sty digito2
 
@@ -359,7 +356,7 @@ Overscan:
     REPEAT 30                     ; 30 scanlines de overscan...
         sta WSYNC
     REPEND
-    jmp InicioFrame ; ...e começamos tudo de novo!
+    jmp InicioFrame               ; ...e começamos tudo de novo!
 
 ; Tabelas de bits que devem ser setados para desenhar cada um dos dígitos
 ; em cada registro do playfield (construídas pelo gera_tabelas.py) a partir
