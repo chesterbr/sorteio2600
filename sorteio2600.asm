@@ -7,7 +7,7 @@
 ; O código é livre (vide final do arquivo). Para compilar use o DASM
 ; (http://dasm-dillon.sourceforge.net/), através do comando:
 ;
-;   dasm sorteio.asm -osorteio.bin -f3
+;   dasm sorteio2600.asm -osorteio2600.bin -f3
 ;
 
     PROCESSOR 6502
