@@ -5,8 +5,6 @@ sorteio2600 - (c) 2011 Chester (Carlos Duarte do Nascimento) - README
 Este programa para Atari 2600 sorteia um número entre 1 e um múltiplo de 100, e foi
 desenvolvido para uso no Dev In Vale. Seu código é livre (vide abaixo).
 
-OBS.: Ainda está em desenvolvimento!
-
 Arquivos
 --------
 
