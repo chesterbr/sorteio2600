@@ -291,8 +291,11 @@ DesenhaDigitos:
     
 DecideIncremento:
     lda modoAtual
-    cmp #MODO_RODANDO             ; No MODO_RODANDO incrementamos o dígito para cada scanline
-    beq IncrementaDigitos
+    cmp #MODO_RODANDO             ; No MODO_RODANDO incrementamos o dígito para cada scanline...
+    bne NaoEModoRodando    
+    cpx #191                      ; ...exceto na última (porque o incremento pode precisar de duas)
+    bcc IncrementaDigitos
+NaoEModoRodando:
     cmp #MODO_PARANDO             ; No MODO_SELECT e MODO_PARADO nunca incrementamos o dígito
     bne FimScanline
     lda flagAtualizaDigito        ; No MODO_PARANDO incrementamos o dígito apenas quando a
@@ -312,11 +315,11 @@ LogicaIncremento:
     cmp digito2
     bne FimScanline
     sty digito2                       ; Estourou unidade, incrementa dezena
-    sta WSYNC                         ; A essa altura já queimamos quase uma scanline,
-    inx                               ;   vamos usar a próxima, incrementando o contador
     inc digito1
     cmp digito1
     bne FimScanline
+    sta WSYNC                         ; A essa altura já queimamos quase uma scanline,
+    inx                               ;   vamos usar a próxima, incrementando o contador
     sty digito1                       ; Estourou dezena, incrementa centena
     inc digito0
     lda limiteDigito0                 ; (o estouro da centena não é no 10, e sim no limte)
@@ -329,8 +332,9 @@ LogicaIncremento:
 FimScanline:
     sta WSYNC                     ; Aguarda o final do scanline
     inx                           ; Incrementa o contador e repete até completar a tela
-    cpx #191
-    bne Scanline
+    cpx #192
+    bcs Overscan
+    jmp Scanline
  
 ;;;;; OVERSCAN ;;;;;
 
