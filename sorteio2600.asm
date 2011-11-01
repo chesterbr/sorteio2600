@@ -14,7 +14,7 @@
     INCLUDE "vcs.h"
 
 ; Constantes
-SCANLINES_POR_LINHA       = 6       ; Quantas scanlines cada linha do desenho do dígito deve ter
+SCANLINES_POR_LINHA       = 6       ; # de scanlines por linha do desenho do dígito
 MODO_SELECT               = %0001   ; Mostra/altera o limite superior (GAME_SELECT)
 MODO_RODANDO              = %0010   ; Incrementa os dígitos a cada scanline vazia da tela
 MODO_PARANDO              = %0100   ; Incrementa um dígito a cada n frames (FIRE)
@@ -23,6 +23,8 @@ CHAVE_GAME_SELECT         = %10
 CHAVE_GAME_RESET          = %01
 CHAVES_GAME_SELECT_RESET  = %11
 MAX_FRAMES_POR_INCREMENTO = 25
+COR_SELECT                = $6F
+COR_DEFAULT               = $FF
 
 ; RAM (variáveis)
 digito0              = $80         ; Centena (0 a 9) exibida na tela usando PF0+PF1
@@ -94,11 +96,9 @@ LoopPosicaoMissile:               ;   isso é preciso contar os ciclos para posi
     sta HMM0
     sta HMOVE                     ; Executa o deslocamento
     sta WSYNC
-    lda #$FF                      
-    sta COLUP1                    ; Playfield amarelo
+    lda #%00000010                
+    sta CTRLPF                    ; Score mode=1; PF priority=0; Reflect=0;
     sta ENAM0                     ; Habilita missile
-    lda #%00000010                ; Score mode=1; 
-    sta CTRLPF    
     
 
 
@@ -183,6 +183,21 @@ FimModoParando:
     sta WSYNC    
 
 MiscStuff:                        ; Quarta linha do VBlank
+AjustaCor:
+    lda modoAtual
+    cmp #MODO_SELECT
+    bne CorNaoESelect
+    ldy #COR_SELECT
+    jmp CorDefinida
+CorNaoESelect:
+    cmp #MODO_PARADO
+    bne CorNaoEParado
+    ldy sementeRandom
+    jmp CorDefinida
+CorNaoEParado:
+    ldy #COR_DEFAULT
+CorDefinida:
+    sty COLUP1                    
 IncrementaSemente:        
     sed                           ; Modo decimal (para termos dois dígitos)
     lda sementeRandom
