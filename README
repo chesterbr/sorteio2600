@@ -2,8 +2,23 @@
 sorteio2600 - (c) 2011 Chester (Carlos Duarte do Nascimento) - README
 =====================================================================
 
-Este programa para Atari 2600 sorteia um número entre 1 e um múltiplo de 100, e foi
+Este programa para Atari 2600 sorteia um número 0 <= n < k, onde k é um múltiplo de 100, e foi
 desenvolvido para uso no Dev In Vale. Seu código é livre (vide abaixo).
+
+
+Instruções
+----------
+
+Ao ligar o jogo (ou pressionar GAME SELECT), você verá o valor máximo do sorteio em roxo
+(inicialmente 099). Pressione GAME SELECT para escolher outro máximo (199, 299... até 999).
+
+Ao pressionar GAME RESET, o sorteio começa - os dígitos ficam amarelos e rodando em alta
+velocidade. Para efetivar o sorteio, pressione o botão do joystick 1, que irá diminuir
+a velocidade até que os dígitos parem no número sorteado (que ficará multicolorido).
+
+Para sortear outro número, pressione novamente GAME RESET. A qualquer momento você pode mudar
+o limite pressionando GAME SELECT.
+
 
 Arquivos
 --------
